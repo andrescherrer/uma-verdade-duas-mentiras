@@ -1,6 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 
-export default function Landing({ onEnter }: { onEnter: (roomId: string) => void }) {
+export default function Landing({
+  onEnter,
+  onShowAllGames,
+}: {
+  onEnter: (roomId: string) => void;
+  onShowAllGames: () => void;
+}) {
   const [nickname, setNickname] = useState(localStorage.getItem("vm.nickname") ?? "");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -85,6 +91,12 @@ export default function Landing({ onEnter }: { onEnter: (roomId: string) => void
           <button type="button" className="linkish" disabled={busy} onClick={createRoom}>
             Ou criar uma nova sala
           </button>
+          <a className="linkish overview-link" href="/todas-os-jogos" onClick={(event) => {
+            event.preventDefault();
+            onShowAllGames();
+          }}>
+            Ver todas as salas
+          </a>
         </form>
         {error ? <p className="hint landing-error">{error}</p> : null}
         <InfoNote />

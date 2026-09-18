@@ -1,27 +1,47 @@
 import { useEffect, useState } from "react";
+import AllGames from "./AllGames";
 import Landing from "./Landing";
 import Room from "./Room";
 
-function roomFromPath(): string | null {
-  const match = window.location.pathname.match(/^\/sala\/([A-Za-z0-9]+)/i);
-  return match ? match[1].toUpperCase() : null;
+type View = { kind: "landing" } | { kind: "overview" } | { kind: "room"; roomId: string };
+
+function viewFromPath(): View {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/todas-os-jogos") return { kind: "overview" };
+  const match = path.match(/^\/sala\/([A-Za-z0-9]+)/i);
+  return match ? { kind: "room", roomId: match[1].toUpperCase() } : { kind: "landing" };
 }
 
 export default function App() {
-  const [roomId, setRoomId] = useState<string | null>(roomFromPath);
+  const [view, setView] = useState<View>(viewFromPath);
 
   useEffect(() => {
-    const onPop = () => setRoomId(roomFromPath());
+    const onPop = () => setView(viewFromPath());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  function openRoom(id: string) {
-    const next = id.toUpperCase();
-    window.history.pushState({}, "", `/sala/${next}`);
-    setRoomId(next);
+  function go(path: string, next: View) {
+    window.history.pushState({}, "", path);
+    setView(next);
   }
 
-  if (!roomId) return <Landing onEnter={openRoom} />;
-  return <Room roomId={roomId} />;
+  function openRoom(id: string) {
+    const roomId = id.toUpperCase();
+    go(`/sala/${roomId}`, { kind: "room", roomId });
+  }
+
+  function openOverview() {
+    go("/todas-os-jogos", { kind: "overview" });
+  }
+
+  function openLanding() {
+    go("/", { kind: "landing" });
+  }
+
+  if (view.kind === "overview") {
+    return <AllGames onEnter={openRoom} onBack={openLanding} />;
+  }
+  if (view.kind === "room") return <Room roomId={view.roomId} />;
+  return <Landing onEnter={openRoom} onShowAllGames={openOverview} />;
 }

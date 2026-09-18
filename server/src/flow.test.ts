@@ -134,6 +134,37 @@ test("join em código inventado não cria sala", async (t) => {
   assert.equal(app.manager.rooms.size, 0);
 });
 
+test("GET /api/rooms lista salas ativas e usuários conectados", async (t) => {
+  const app = await listen();
+  t.after(() => closeApp(app));
+
+  const empty = await fetch(`${app.url}/api/rooms`);
+  assert.equal(empty.status, 200);
+  assert.deepEqual(await empty.json(), { rooms: [], connectedUsers: [] });
+
+  const room = app.manager.create();
+  const sara = room.join("Sara", "sock-1");
+  const joao = room.join("João", "sock-2");
+  room.disconnect(joao.id);
+
+  const listed = await fetch(`${app.url}/api/rooms`);
+  assert.equal(listed.status, 200);
+  const payload = await listed.json();
+  assert.equal(payload.rooms.length, 1);
+  assert.equal(payload.rooms[0].roomId, room.id);
+  assert.equal(payload.rooms[0].phase, "lobby");
+  assert.equal(payload.rooms[0].playerCount, 2);
+  assert.equal(payload.rooms[0].connectedCount, 1);
+  assert.deepEqual(
+    payload.connectedUsers.map((user: { nickname: string; roomId: string }) => ({
+      nickname: user.nickname,
+      roomId: user.roomId,
+    })),
+    [{ nickname: "Sara", roomId: room.id }],
+  );
+  assert.equal(sara.connected, true);
+});
+
 test("imagem só é servida com token de quem está na sala", async (t) => {
   const app = await listen();
   t.after(() => closeApp(app));

@@ -164,6 +164,34 @@ export interface KickedPayload {
   reason: string;
 }
 
+export interface OverviewPlayer {
+  id: string;
+  nickname: string;
+  connected: boolean;
+  isAdmin: boolean;
+}
+
+export interface OverviewRoom {
+  roomId: string;
+  phase: Phase;
+  createdAt: number;
+  playerCount: number;
+  connectedCount: number;
+  players: OverviewPlayer[];
+}
+
+export interface OverviewUser {
+  id: string;
+  nickname: string;
+  roomId: string;
+  isAdmin: boolean;
+}
+
+export interface OverviewPayload {
+  rooms: OverviewRoom[];
+  connectedUsers: OverviewUser[];
+}
+
 export const NICKNAME_MAX = 24;
 export const STATEMENT_MAX = 220;
 export const STATEMENT_MIN = 3;

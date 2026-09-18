@@ -106,6 +106,10 @@ export function createApp(manager = new RoomManager()) {
     }
   });
 
+  app.get("/api/rooms", (_req, res) => {
+    res.json(manager.listOverview());
+  });
+
   app.get("/api/rooms/:roomId", (req, res) => {
     const room = manager.get(routeParam(req.params.roomId));
     if (!room) {

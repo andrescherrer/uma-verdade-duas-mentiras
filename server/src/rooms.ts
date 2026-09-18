@@ -1,4 +1,4 @@
-import { MAX_ROOMS } from "../../shared/protocol.ts";
+import { MAX_ROOMS, type OverviewPayload } from "../../shared/protocol.ts";
 import { GameError, GameRoom, type RoomEvent } from "./room.ts";
 import { ImageStore } from "./images.ts";
 
@@ -58,6 +58,38 @@ export class RoomManager {
     let id = createRoomId();
     while (this.rooms.has(id)) id = createRoomId();
     return this.getOrCreate(id);
+  }
+
+  listOverview(): OverviewPayload {
+    const rooms = [...this.rooms.values()]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((room) => {
+        const players = [...room.players.values()].map((player) => ({
+          id: player.id,
+          nickname: player.nickname,
+          connected: player.connected,
+          isAdmin: player.id === room.adminId,
+        }));
+        return {
+          roomId: room.id,
+          phase: room.phase,
+          createdAt: room.createdAt,
+          playerCount: players.length,
+          connectedCount: players.filter((player) => player.connected).length,
+          players,
+        };
+      });
+    const connectedUsers = rooms.flatMap((room) =>
+      room.players
+        .filter((player) => player.connected)
+        .map((player) => ({
+          id: player.id,
+          nickname: player.nickname,
+          roomId: room.roomId,
+          isAdmin: player.isAdmin,
+        })),
+    );
+    return { rooms, connectedUsers };
   }
 
   private handleEvent(roomId: string, event: RoomEvent): void {
