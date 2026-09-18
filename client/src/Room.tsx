@@ -142,7 +142,7 @@ export default function Room({ roomId }: { roomId: string }) {
               autoComplete="nickname"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              placeholder="Sara"
+              placeholder="Fulano da Silva"
             />
             <button className="btn wide" type="submit">Entrar na sala</button>
           </form>

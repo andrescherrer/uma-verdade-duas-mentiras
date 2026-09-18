@@ -67,7 +67,7 @@ export default function Landing({ onEnter }: { onEnter: (roomId: string) => void
             maxLength={24}
             minLength={2}
             autoComplete="nickname"
-            placeholder="Sara"
+            placeholder="Fulano da Silva"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
           />
