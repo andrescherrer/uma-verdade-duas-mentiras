@@ -1,0 +1,19 @@
+{
+  "name": "verdade-ou-duas-mentiras",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": ["client", "server"],
+  "description": "Jogo multiplayer Uma Verdade e Duas Mentiras, sincronizado via WebSocket.",
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "build": "npm run build --prefix client && npm run build --prefix server",
+    "start": "npm run start --prefix server",
+    "test": "npm test --prefix server"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
