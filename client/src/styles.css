@@ -1394,5 +1394,12 @@ textarea { min-height: 78px; resize: vertical; }
   border-radius: 14px;
   padding: 12px 18px;
 }
-.overview-back { margin-top: 8px; }
+.overview-back { margin-top: 8px; display: inline-block; }
+.landing-hero .overview-back { margin-top: 16px; }
+.overview-foot {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 8px;
+}
 .landing-card .overview-link { color: #9aa3bd; }

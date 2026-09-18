@@ -134,11 +134,32 @@ test("join em código inventado não cria sala", async (t) => {
   assert.equal(app.manager.rooms.size, 0);
 });
 
-test("GET /api/rooms lista salas ativas e usuários conectados", async (t) => {
+async function adminLogin(url: string, username = "admin-master-blaster", password = "!@#987654321") {
+  return fetch(`${url}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+test("GET /api/rooms exige login do admin-master-blaster", async (t) => {
   const app = await listen();
   t.after(() => closeApp(app));
 
-  const empty = await fetch(`${app.url}/api/rooms`);
+  const blocked = await fetch(`${app.url}/api/rooms`);
+  assert.equal(blocked.status, 401);
+
+  const wrong = await adminLogin(app.url, "admin-master-blaster", "senha-errada");
+  assert.equal(wrong.status, 401);
+
+  const login = await adminLogin(app.url);
+  assert.equal(login.status, 200);
+  const { token } = await login.json();
+  assert.equal(typeof token, "string");
+
+  const empty = await fetch(`${app.url}/api/rooms`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   assert.equal(empty.status, 200);
   assert.deepEqual(await empty.json(), { rooms: [], connectedUsers: [] });
 
@@ -147,7 +168,9 @@ test("GET /api/rooms lista salas ativas e usuários conectados", async (t) => {
   const joao = room.join("João", "sock-2");
   room.disconnect(joao.id);
 
-  const listed = await fetch(`${app.url}/api/rooms`);
+  const listed = await fetch(`${app.url}/api/rooms`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   assert.equal(listed.status, 200);
   const payload = await listed.json();
   assert.equal(payload.rooms.length, 1);

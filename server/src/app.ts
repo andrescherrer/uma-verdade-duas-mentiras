@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,23 @@ import { GameError } from "./room.ts";
 import { RoomManager } from "./rooms.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin-master-blaster";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "!@#987654321";
+const ADMIN_TTL_MS = 8 * 60 * 60 * 1000;
+
+function sha256(value: string) {
+  return createHash("sha256").update(value).digest();
+}
+
+function secretEquals(given: string, expected: string) {
+  return timingSafeEqual(sha256(given), sha256(expected));
+}
+
+function readAdminToken(req: { header(name: string): string | undefined }) {
+  const auth = String(req.header("authorization") ?? "");
+  if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
+  return String(req.header("x-admin-token") ?? "").trim();
+}
 
 function errorPayload(err: unknown): ErrorPayload {
   if (err instanceof GameError) return { code: err.code, message: err.message };
@@ -85,6 +103,41 @@ export function createApp(manager = new RoomManager()) {
   const createRoomLimit = createRateLimiter(8);
   const uploadLimit = createRateLimiter(20);
   const joinLimit = createRateLimiter(30);
+  const adminLoginLimit = createRateLimiter(10);
+  const adminSessions = new Map<string, number>();
+
+  function adminAuthorized(req: { header(name: string): string | undefined }) {
+    const token = readAdminToken(req);
+    const expiresAt = adminSessions.get(token);
+    if (!expiresAt) return false;
+    if (Date.now() > expiresAt) {
+      adminSessions.delete(token);
+      return false;
+    }
+    return true;
+  }
+
+  app.post("/api/admin/login", (req, res) => {
+    if (!adminLoginLimit(clientIp(req))) {
+      res.status(429).json({ message: "Muitas tentativas. Espere um pouco." });
+      return;
+    }
+    const username = String(req.body?.username ?? "");
+    const password = String(req.body?.password ?? "");
+    if (!secretEquals(username, ADMIN_USERNAME) || !secretEquals(password, ADMIN_PASSWORD)) {
+      res.status(401).json({ message: "Usuário ou senha inválidos." });
+      return;
+    }
+    const token = randomUUID();
+    adminSessions.set(token, Date.now() + ADMIN_TTL_MS);
+    res.json({ token });
+  });
+
+  app.post("/api/admin/logout", (req, res) => {
+    const token = readAdminToken(req);
+    if (token) adminSessions.delete(token);
+    res.json({ ok: true });
+  });
 
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -106,7 +159,11 @@ export function createApp(manager = new RoomManager()) {
     }
   });
 
-  app.get("/api/rooms", (_req, res) => {
+  app.get("/api/rooms", (req, res) => {
+    if (!adminAuthorized(req)) {
+      res.status(401).json({ message: "Acesso restrito." });
+      return;
+    }
     res.json(manager.listOverview());
   });
 

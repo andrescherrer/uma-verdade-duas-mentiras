@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { OverviewPayload, OverviewRoom, Phase } from "../../shared/protocol.ts";
-import { BrandHeading, LandingBlobs } from "./Landing";
+import { BrandHeading, InfoNote, LandingBlobs } from "./Landing";
 import { avatarColor } from "./avatar";
+
+const ADMIN_TOKEN_KEY = "vm.adminToken";
 
 const PHASE_LABEL: Record<Phase, string> = {
   lobby: "Lobby",
@@ -18,15 +20,29 @@ export default function AllGames({
   onEnter: (roomId: string) => void;
   onBack: () => void;
 }) {
+  const [token, setToken] = useState(() => sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? "");
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [error, setError] = useState("");
 
+  function clearSession() {
+    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    setToken("");
+    setData(null);
+  }
+
   useEffect(() => {
+    if (!token) return;
     let cancelled = false;
 
     async function load() {
       try {
-        const res = await fetch("/api/rooms");
+        const res = await fetch("/api/rooms", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401) {
+          if (!cancelled) clearSession();
+          return;
+        }
         if (!res.ok) throw new Error("Falha ao carregar.");
         const payload = (await res.json()) as OverviewPayload;
         if (!cancelled) {
@@ -44,7 +60,24 @@ export default function AllGames({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [token]);
+
+  async function logout() {
+    if (token) {
+      await fetch("/api/admin/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => undefined);
+    }
+    clearSession();
+  }
+
+  if (!token) {
+    return <AdminGate onBack={onBack} onAuthed={(next) => {
+      sessionStorage.setItem(ADMIN_TOKEN_KEY, next);
+      setToken(next);
+    }} />;
+  }
 
   const rooms = data?.rooms ?? [];
   const connectedUsers = data?.connectedUsers ?? [];
@@ -111,6 +144,87 @@ export default function AllGames({
           )}
         </section>
 
+        <div className="overview-foot">
+          <button type="button" className="linkish" onClick={() => void logout()}>
+            Sair
+          </button>
+          <a className="linkish overview-back" href="/" onClick={(event) => {
+            event.preventDefault();
+            onBack();
+          }}>
+            Voltar ao início
+          </a>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AdminGate({
+  onAuthed,
+  onBack,
+}: {
+  onAuthed: (token: string) => void;
+  onBack: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { message?: string; token?: string };
+      if (!res.ok || typeof payload.token !== "string") {
+        throw new Error(payload.message ?? "Usuário ou senha inválidos.");
+      }
+      onAuthed(payload.token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Usuário ou senha inválidos.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="landing">
+      <LandingBlobs />
+      <section className="landing-hero">
+        <BrandHeading />
+        <p className="lede">Acesso restrito ao painel de salas.</p>
+        <form className="landing-card" onSubmit={(event) => void submit(event)}>
+          <h2>Entrar como admin</h2>
+          <label htmlFor="admin-user">Usuário</label>
+          <input
+            id="admin-user"
+            className="field"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <label htmlFor="admin-pass">Senha</label>
+          <input
+            id="admin-pass"
+            className="field"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button className="btn wide" type="submit" disabled={busy}>
+            Entrar
+          </button>
+        </form>
+        {error ? <p className="hint landing-error">{error}</p> : null}
+        <InfoNote>Somente o administrador master pode ver as salas ativas.</InfoNote>
         <a className="linkish overview-back" href="/" onClick={(event) => {
           event.preventDefault();
           onBack();
