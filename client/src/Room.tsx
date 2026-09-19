@@ -26,7 +26,13 @@ function imageUrl(id: string | null | undefined, roomId: string) {
 
 const LETTERS = ["A", "B", "C"];
 
-export default function Room({ roomId }: { roomId: string }) {
+export default function Room({
+  roomId,
+  onShowAllGames,
+}: {
+  roomId: string;
+  onShowAllGames: () => void;
+}) {
   const socket = useMemo(() => getSocket(), []);
   const [nickname, setNickname] = useState(localStorage.getItem("vm.nickname") ?? "");
   const [joined, setJoined] = useState(false);
@@ -125,7 +131,7 @@ export default function Room({ roomId }: { roomId: string }) {
       <main className="landing">
         <LandingBlobs />
         <section className="landing-hero">
-          <BrandHeading />
+          <BrandHeading onDoubleClick={onShowAllGames} />
           <p className="lede">
             Descubra o que é verdade sobre
             <br />
@@ -165,7 +171,7 @@ export default function Room({ roomId }: { roomId: string }) {
       ) : (
         <div className="room-frame">
           <header className="room-head">
-            <div className="brand-lockup">
+            <div className="brand-lockup" onDoubleClick={onShowAllGames}>
               Uma Verdade <span className="accent">e Duas Mentiras</span>
             </div>
             <div className="room-head-actions">

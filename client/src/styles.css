@@ -98,6 +98,7 @@ p { margin: 0; }
   margin: 8px auto 4px;
   transform: rotate(-3deg);
   overflow: visible;
+  user-select: none;
 }
 .brand-title {
   font-family: Fredoka, Nunito, sans-serif;
@@ -328,6 +329,7 @@ textarea { min-height: 78px; resize: vertical; }
   font-size: 18px;
   color: white;
   letter-spacing: -0.02em;
+  user-select: none;
 }
 .brand-lockup .accent { color: #a8acf8; }
 .room-head-actions {

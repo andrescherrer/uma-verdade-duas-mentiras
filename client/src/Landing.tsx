@@ -58,7 +58,7 @@ export default function Landing({
     <main className="landing">
       <LandingBlobs />
       <section className="landing-hero">
-        <BrandHeading />
+        <BrandHeading onDoubleClick={onShowAllGames} />
         <p className="lede">
           Descubra o que é verdade sobre
           <br />
@@ -115,9 +115,9 @@ export function LandingBlobs() {
   );
 }
 
-export function BrandHeading() {
+export function BrandHeading({ onDoubleClick }: { onDoubleClick?: () => void }) {
   return (
-    <div className="brand-heading">
+    <div className="brand-heading" onDoubleClick={onDoubleClick}>
       <Burst className="burst burst-left" />
       <h1 className="brand-title">
         <span>Uma Verdade</span>

@@ -32,7 +32,7 @@ export default function App() {
   }
 
   function openOverview() {
-    go("/todas-os-jogos", { kind: "overview" });
+    window.location.assign("/todas-os-jogos");
   }
 
   function openLanding() {
@@ -42,6 +42,8 @@ export default function App() {
   if (view.kind === "overview") {
     return <AllGames onEnter={openRoom} onBack={openLanding} />;
   }
-  if (view.kind === "room") return <Room roomId={view.roomId} />;
+  if (view.kind === "room") {
+    return <Room roomId={view.roomId} onShowAllGames={openOverview} />;
+  }
   return <Landing onEnter={openRoom} onShowAllGames={openOverview} />;
 }
