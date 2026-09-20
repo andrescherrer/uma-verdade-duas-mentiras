@@ -60,7 +60,7 @@ export class RoomManager {
     return this.getOrCreate(id);
   }
 
-  listOverview(): OverviewPayload {
+  listOverview(): Omit<OverviewPayload, "visitors"> {
     const rooms = [...this.rooms.values()]
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((room) => {
@@ -89,7 +89,7 @@ export class RoomManager {
           isAdmin: player.isAdmin,
         })),
     );
-    return { rooms, connectedUsers };
+    return { rooms, connectedUsers } satisfies Omit<OverviewPayload, "visitors">;
   }
 
   private handleEvent(roomId: string, event: RoomEvent): void {

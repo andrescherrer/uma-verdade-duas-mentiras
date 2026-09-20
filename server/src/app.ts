@@ -19,8 +19,10 @@ import {
   type SubmitPrepPayload,
   type VotePayload,
 } from "../../shared/protocol.ts";
+import { forwardedIp } from "./geo.ts";
 import { GameError } from "./room.ts";
 import { RoomManager } from "./rooms.ts";
+import { VisitorStore } from "./visitors.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin-master-blaster";
@@ -86,7 +88,11 @@ function createRateLimiter(max: number, windowMs = 60_000) {
 }
 
 function clientIp(req: { ip?: string; socket?: { remoteAddress?: string } }): string {
-  return req.socket?.remoteAddress ?? req.ip ?? "unknown";
+  return forwardedIp(undefined, req.ip ?? req.socket?.remoteAddress ?? "unknown");
+}
+
+function socketClientIp(socket: { handshake: { address: string; headers: { [key: string]: string | string[] | undefined } } }): string {
+  return forwardedIp(socket.handshake.headers["x-forwarded-for"], socket.handshake.address || "unknown");
 }
 
 function routeParam(value: unknown): string {
@@ -94,11 +100,15 @@ function routeParam(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-export function createApp(manager = new RoomManager()) {
+export function createApp(manager = new RoomManager(), visitors = VisitorStore.openDefault()) {
   const app = express();
   const corsOptions = corsOrigins();
+  app.set("trust proxy", 1);
   app.use(cors(corsOptions));
   app.use(express.json());
+  visitors.purgeExpired();
+  const purgeTimer = setInterval(() => visitors.purgeExpired(), 60 * 60 * 1000);
+  purgeTimer.unref();
 
   const createRoomLimit = createRateLimiter(8);
   const uploadLimit = createRateLimiter(20);
@@ -164,7 +174,10 @@ export function createApp(manager = new RoomManager()) {
       res.status(401).json({ message: "Acesso restrito." });
       return;
     }
-    res.json(manager.listOverview());
+    res.json({
+      ...manager.listOverview(),
+      visitors: visitors.list(),
+    });
   });
 
   app.get("/api/rooms/:roomId", (req, res) => {
@@ -307,6 +320,15 @@ export function createApp(manager = new RoomManager()) {
         playerId = player.id;
         socket.join(room.id);
         trackSocket(player.id, socket.id);
+        try {
+          visitors.record({
+            ip: socketClientIp(socket),
+            nickname: player.nickname,
+            roomId: room.id,
+          });
+        } catch (err) {
+          console.error("Falha ao registrar visitante", err);
+        }
         socket.emit(S2C.JOINED, {
           playerId: player.id,
           sessionToken: player.sessionToken,
@@ -437,5 +459,7 @@ export function createApp(manager = new RoomManager()) {
     });
   });
 
-  return { app, httpServer, io, manager };
+  httpServer.on("close", () => clearInterval(purgeTimer));
+
+  return { app, httpServer, io, manager, visitors };
 }

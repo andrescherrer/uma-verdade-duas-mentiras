@@ -187,9 +187,19 @@ export interface OverviewUser {
   isAdmin: boolean;
 }
 
+export interface VisitorRecord {
+  ip: string;
+  nickname: string;
+  location: string;
+  roomId: string | null;
+  firstSeenAt: number;
+  lastSeenAt: number;
+}
+
 export interface OverviewPayload {
   rooms: OverviewRoom[];
   connectedUsers: OverviewUser[];
+  visitors: VisitorRecord[];
 }
 
 export const NICKNAME_MAX = 24;

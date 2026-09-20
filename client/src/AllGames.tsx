@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { OverviewPayload, OverviewRoom, Phase } from "../../shared/protocol.ts";
+import type { OverviewPayload, OverviewRoom, Phase, VisitorRecord } from "../../shared/protocol.ts";
 import { BrandHeading, InfoNote, LandingBlobs } from "./Landing";
 import { avatarColor } from "./avatar";
 
@@ -81,6 +81,7 @@ export default function AllGames({
 
   const rooms = data?.rooms ?? [];
   const connectedUsers = data?.connectedUsers ?? [];
+  const visitors = data?.visitors ?? [];
 
   return (
     <main className="overview">
@@ -96,6 +97,10 @@ export default function AllGames({
             <span>
               <strong>{connectedUsers.length}</strong>{" "}
               {connectedUsers.length === 1 ? "pessoa conectada" : "pessoas conectadas"}
+            </span>
+            <span>
+              <strong>{visitors.length}</strong>{" "}
+              {visitors.length === 1 ? "visitante em 30 dias" : "visitantes em 30 dias"}
             </span>
           </div>
         ) : null}
@@ -126,6 +131,33 @@ export default function AllGames({
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+
+        <section className="overview-card">
+          <h2>Visitantes dos últimos 30 dias</h2>
+          {!data ? (
+            <p className="overview-empty">Carregando…</p>
+          ) : visitors.length === 0 ? (
+            <p className="overview-empty">Ninguém entrou em uma sala neste período.</p>
+          ) : (
+            <div className="overview-table-wrap">
+              <table className="overview-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>IP</th>
+                    <th>Local</th>
+                    <th>Última visita</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visitors.map((visitor) => (
+                    <VisitorRow key={`${visitor.ip}-${visitor.nickname}`} visitor={visitor} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
@@ -234,6 +266,24 @@ function AdminGate({
       </section>
     </main>
   );
+}
+
+function VisitorRow({ visitor }: { visitor: VisitorRecord }) {
+  return (
+    <tr>
+      <td>
+        <strong>{visitor.nickname}</strong>
+        {visitor.roomId ? <small>Sala {visitor.roomId}</small> : null}
+      </td>
+      <td><code>{visitor.ip}</code></td>
+      <td>{visitor.location}</td>
+      <td>{formatWhen(visitor.lastSeenAt)}</td>
+    </tr>
+  );
+}
+
+function formatWhen(ts: number) {
+  return new Date(ts).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
 function roomCountLabel(room: OverviewRoom) {

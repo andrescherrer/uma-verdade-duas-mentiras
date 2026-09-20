@@ -1251,7 +1251,7 @@ textarea { min-height: 78px; resize: vertical; }
   overflow: hidden;
 }
 .overview-hero {
-  width: min(720px, 100%);
+  width: min(860px, 100%);
   text-align: center;
   position: relative;
   z-index: 1;
@@ -1329,6 +1329,50 @@ textarea { min-height: 78px; resize: vertical; }
   color: var(--muted);
   font-weight: 800;
   font-size: 11px;
+}
+.overview-table-wrap {
+  overflow-x: auto;
+}
+.overview-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.overview-table th {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0 8px 10px;
+  white-space: nowrap;
+}
+.overview-table td {
+  padding: 10px 8px;
+  border-top: 1px solid #eef1f8;
+  font-size: 13px;
+  font-weight: 800;
+  color: #3d4568;
+  vertical-align: top;
+}
+.overview-table td strong {
+  display: block;
+  color: #1c234a;
+  font-size: 14px;
+}
+.overview-table td small {
+  display: block;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.overview-table code {
+  font-size: 12px;
+  font-weight: 700;
+  background: #f6f8ff;
+  padding: 2px 6px;
+  border-radius: 8px;
 }
 .overview-rooms {
   list-style: none;

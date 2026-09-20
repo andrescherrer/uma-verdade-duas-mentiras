@@ -6,3 +6,8 @@ uploads/
 .DS_Store
 client/dist/
 server/dist/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+server/data/

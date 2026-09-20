@@ -3,6 +3,8 @@ import test from "node:test";
 import { io as clientIo, type Socket } from "socket.io-client";
 import { C2S, S2C, type JoinedPayload, type PublicState } from "../../shared/protocol.ts";
 import { createApp } from "./app.ts";
+import { RoomManager } from "./rooms.ts";
+import { VisitorStore } from "./visitors.ts";
 
 function waitFor<T>(socket: Socket, event: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -40,7 +42,7 @@ async function connect(url: string, roomId: string, nickname: string) {
 }
 
 test("fluxo socket.io: dois clientes entram, preparam, votam e revelam", async (t) => {
-  const { httpServer, io, manager } = createApp();
+  const { httpServer, io, manager } = createApp(new RoomManager(), VisitorStore.memory());
   await new Promise<void>((resolve) => httpServer.listen(0, resolve));
   const address = httpServer.address();
   assert.ok(address && typeof address === "object");
@@ -104,7 +106,7 @@ test("fluxo socket.io: dois clientes entram, preparam, votam e revelam", async (
 });
 
 async function listen() {
-  const app = createApp();
+  const app = createApp(new RoomManager(), VisitorStore.memory());
   await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
   const address = app.httpServer.address();
   assert.ok(address && typeof address === "object");
@@ -161,7 +163,7 @@ test("GET /api/rooms exige login do admin-master-blaster", async (t) => {
     headers: { Authorization: `Bearer ${token}` },
   });
   assert.equal(empty.status, 200);
-  assert.deepEqual(await empty.json(), { rooms: [], connectedUsers: [] });
+  assert.deepEqual(await empty.json(), { rooms: [], connectedUsers: [], visitors: [] });
 
   const room = app.manager.create();
   const sara = room.join("Sara", "sock-1");
@@ -213,4 +215,24 @@ test("imagem só é servida com token de quem está na sala", async (t) => {
   );
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get("content-type"), "image/png");
+});
+
+test("entrar na sala grava IP, nome e local do visitante por 30 dias", async (t) => {
+  const app = await listen();
+  t.after(() => closeApp(app));
+  const room = app.manager.create();
+  const client = await connect(app.url, room.id, "Sara");
+  t.after(() => client.socket.disconnect());
+
+  const login = await adminLogin(app.url);
+  const { token } = await login.json();
+  const listed = await fetch(`${app.url}/api/rooms`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const payload = await listed.json();
+  assert.equal(payload.visitors.length, 1);
+  assert.equal(payload.visitors[0].nickname, "Sara");
+  assert.equal(payload.visitors[0].roomId, room.id);
+  assert.ok(payload.visitors[0].ip);
+  assert.equal(payload.visitors[0].location, "Rede local");
 });

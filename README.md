@@ -1,6 +1,6 @@
 # Uma Verdade e Duas Mentiras
 
-Jogo multiplayer para uma equipe na mesma sala, sem cadastro. O estado da partida vive no servidor e é sincronizado por WebSocket (Socket.IO).
+Jogo multiplayer para uma equipe na mesma sala, sem cadastro. O estado da partida vive na memória do servidor e é sincronizado por WebSocket (Socket.IO). Quem entra numa sala fica registrado em SQLite (IP, nome e localização aproximada) por 30 dias, visível só no painel admin.
 
 ## Como rodar
 
@@ -37,7 +37,10 @@ Cliente React  --Socket.IO-->  Express + Socket.IO
 
 - `server/src/room.ts`: regras, fila de participantes, timer, pontuação, remoção.
 - `server/src/app.ts`: HTTP (criar sala, upload de imagem) + eventos Socket.IO.
+- `server/src/visitors.ts`: SQLite com IP, nome e local geográfico de cada entrada; registros somem depois de 1 mês.
 - Timer com `setTimeout` no servidor (`endsAt` absoluto). Se todos os eleitores conectados votam, a rodada fecha na hora.
+
+O arquivo do banco fica em `server/data/visitors.sqlite` (ou `SQLITE_PATH`). IPs da rede local aparecem como “Rede local”; IPs públicos usam GeoIP (cidade, região, país).
 
 ### O que fica no servidor (nunca no cliente antes da hora)
 
