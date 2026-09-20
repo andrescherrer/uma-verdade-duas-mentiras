@@ -109,8 +109,8 @@ A “próxima pessoa” não é uma tela à parte: após a revelação o servido
 - **Reconexão:** o token restaura o mesmo jogador, afirmações, votos e pontos. Desconectar **não** remove da sala (evita sumir num refresh). Quem ficou “preso” pode ser removido por qualquer pessoa.
 - **Admin sai ou é removido:** o próximo da lista (preferência a quem está conectado) vira admin.
 - **Remoção no meio da rodada:** some da lista e da fila. Se era a vez dela, a rodada é abortada e o jogo segue. Votos dela são descartados. Se restar menos de 2 pessoas, vai para o resultado.
-- **Empate:** mesma colocação; a seguinte pula (1º, 1º, 3º). Na lista, empate desempata só visualmente pelo nome.
-- **Pontos:** acerto +1; erro ou ausência 0. Quem não votou até o fim do timer fica com 0 na rodada.
+- **Empate:** mesma colocação (ex.: dois 1ºs); a seguinte pula (1º, 1º, 3º). Na tela final, empate no 1º aparece como empate compartilhado.
+- **Pontos:** acerto +1; erro ou ausência 0. Quem não votou até o fim do timer fica com 0 na rodada. Ser admin **não** dá ponto.
 - **Imagens:** upload HTTP autenticado pelo token; URL só entra no estado na revelação.
 
 ## Concorrência

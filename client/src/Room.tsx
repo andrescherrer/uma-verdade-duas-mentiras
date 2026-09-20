@@ -775,10 +775,12 @@ function Finished({
 }) {
   const scorers = state.ranking.filter((r) => r.score > 0);
   const nobodyWon = scorers.length === 0;
-  const first = scorers.find((r) => r.rank === 1);
-  const second = scorers.find((r) => r.rank === 2);
-  const third = scorers.find((r) => r.rank === 3);
-  const rest = state.ranking.filter((r) => r.rank > 3 || r.rank === 0);
+  const winners = scorers.filter((r) => r.rank === 1);
+  const seconds = scorers.filter((r) => r.rank === 2);
+  const thirds = scorers.filter((r) => r.rank === 3);
+  const onPodium = new Set([...winners, ...seconds, ...thirds].map((r) => r.playerId));
+  const rest = state.ranking.filter((r) => !onPodium.has(r.playerId));
+  const tiedForFirst = winners.length > 1;
 
   return (
     <section className="finish">
@@ -794,6 +796,11 @@ function Finished({
       <h2>Fim de jogo!</h2>
       {nobodyWon ? (
         <p className="lede">Ninguém pontuou. Sem vencedor desta vez.</p>
+      ) : tiedForFirst ? (
+        <p className="lede">
+          Empate no 1º lugar com {winners[0].score}{" "}
+          {winners[0].score === 1 ? "ponto" : "pontos"} cada.
+        </p>
       ) : (
         <p className="lede">Confira o ranking final da equipe.</p>
       )}
@@ -803,16 +810,39 @@ function Finished({
             <RestRow key={entry.playerId} entry={entry} />
           ))}
         </div>
+      ) : tiedForFirst ? (
+        <>
+          <ul className="tie-winners">
+            {winners.map((entry) => (
+              <li key={entry.playerId}>
+                <span className="avatar" style={{ background: avatarColor(entry.nickname) }}>
+                  <PersonMark />
+                </span>
+                <strong>{entry.nickname}</strong>
+                <span>
+                  {entry.score} {entry.score === 1 ? "ponto" : "pontos"}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {rest.length > 0 || seconds.length > 0 || thirds.length > 0 ? (
+            <div className="rest">
+              {[...seconds, ...thirds, ...rest].map((entry) => (
+                <RestRow key={entry.playerId} entry={entry} />
+              ))}
+            </div>
+          ) : null}
+        </>
       ) : (
         <>
           <div className="podium">
-            <PodiumPlace place={2} entry={second} />
-            <PodiumPlace place={1} entry={first} />
-            <PodiumPlace place={3} entry={third} />
+            <PodiumPlace place={2} entry={seconds[0]} />
+            <PodiumPlace place={1} entry={winners[0]} />
+            <PodiumPlace place={3} entry={thirds[0]} />
           </div>
-          {rest.length > 0 ? (
+          {rest.length > 0 || seconds.length > 1 || thirds.length > 1 ? (
             <div className="rest">
-              {rest.map((entry) => (
+              {[...seconds.slice(1), ...thirds.slice(1), ...rest].map((entry) => (
                 <RestRow key={entry.playerId} entry={entry} />
               ))}
             </div>
