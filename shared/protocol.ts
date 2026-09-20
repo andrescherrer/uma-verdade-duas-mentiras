@@ -202,6 +202,16 @@ export interface OverviewPayload {
   visitors: VisitorRecord[];
 }
 
+export const VISITORS_PAGE_SIZE = 20;
+
+export interface VisitorsPagePayload {
+  visitors: VisitorRecord[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 export const NICKNAME_MAX = 24;
 export const STATEMENT_MAX = 220;
 export const STATEMENT_MIN = 3;

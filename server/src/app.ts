@@ -10,6 +10,7 @@ import {
   C2S,
   MAX_IMAGE_BYTES,
   S2C,
+  VISITORS_PAGE_SIZE,
   type ErrorPayload,
   type JoinPayload,
   type KickPayload,
@@ -178,6 +179,15 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
       ...manager.listOverview(),
       visitors: visitors.list(),
     });
+  });
+
+  app.get("/api/admin/visitors", (req, res) => {
+    if (!adminAuthorized(req)) {
+      res.status(401).json({ message: "Acesso restrito." });
+      return;
+    }
+    const page = Number(req.query.page ?? 1);
+    res.json(visitors.listPage(page, VISITORS_PAGE_SIZE));
   });
 
   app.get("/api/rooms/:roomId", (req, res) => {

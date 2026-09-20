@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import type { VisitorRecord } from "../../shared/protocol.ts";
+import { VISITORS_PAGE_SIZE, type VisitorRecord, type VisitorsPagePayload } from "../../shared/protocol.ts";
 import { lookupGeo, type GeoInfo } from "./geo.ts";
 
 export const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -118,10 +118,41 @@ export class VisitorStore {
         `SELECT ip, nickname, location, country, region, city, room_id, first_seen_at, last_seen_at
          FROM visitors
          WHERE last_seen_at >= ?
-         ORDER BY last_seen_at DESC, nickname COLLATE NOCASE ASC`,
+         ORDER BY last_seen_at DESC, id DESC`,
       )
       .all(cutoff);
     return rows.map(toRecord);
+  }
+
+  listPage(page = 1, pageSize = VISITORS_PAGE_SIZE): VisitorsPagePayload {
+    const safeSize = Math.min(100, Math.max(1, Math.trunc(pageSize) || VISITORS_PAGE_SIZE));
+    const cutoff = this.now() - this.retentionMs;
+    const total = asNumber(
+      this.db.prepare("SELECT COUNT(*) AS total FROM visitors WHERE last_seen_at >= ?").get(cutoff)?.total,
+    );
+    const totalPages = Math.ceil(total / safeSize);
+    const requested = Math.trunc(page);
+    const safePage =
+      total === 0 || !Number.isFinite(requested) || requested < 1
+        ? 1
+        : Math.min(totalPages, requested);
+    const offset = (safePage - 1) * safeSize;
+    const rows = this.db
+      .prepare(
+        `SELECT ip, nickname, location, country, region, city, room_id, first_seen_at, last_seen_at
+         FROM visitors
+         WHERE last_seen_at >= ?
+         ORDER BY last_seen_at DESC, id DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(cutoff, safeSize, offset);
+    return {
+      visitors: rows.map(toRecord),
+      page: safePage,
+      pageSize: safeSize,
+      total,
+      totalPages,
+    };
   }
 
   purgeExpired(): number {
@@ -132,6 +163,12 @@ export class VisitorStore {
   close(): void {
     this.db.close();
   }
+}
+
+function asNumber(value: unknown): number {
+  if (typeof value === "bigint") return Number(value);
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function toRecord(row: Record<string, unknown>): VisitorRecord {

@@ -50,3 +50,34 @@ test("apaga registros com mais de 1 mês", (t) => {
   assert.equal(listed.length, 1);
   assert.equal(listed[0].nickname, "Novo");
 });
+
+test("lista visitantes 20 por página", (t) => {
+  let now = 1_000_000;
+  const store = VisitorStore.memory({
+    now: () => now,
+    lookup: () => ({ location: "Rede local", country: null, region: null, city: null }),
+  });
+  t.after(() => store.close());
+
+  for (let i = 1; i <= 21; i += 1) {
+    store.record({ ip: `10.0.0.${i}`, nickname: `Jogador ${i}` });
+    now += 1;
+  }
+
+  const first = store.listPage(1, 20);
+  assert.equal(first.page, 1);
+  assert.equal(first.pageSize, 20);
+  assert.equal(first.total, 21);
+  assert.equal(first.totalPages, 2);
+  assert.equal(first.visitors.length, 20);
+  assert.equal(first.visitors[0].nickname, "Jogador 21");
+
+  const second = store.listPage(2, 20);
+  assert.equal(second.page, 2);
+  assert.equal(second.visitors.length, 1);
+  assert.equal(second.visitors[0].nickname, "Jogador 1");
+
+  const clamped = store.listPage(99, 20);
+  assert.equal(clamped.page, 2);
+  assert.equal(clamped.visitors.length, 1);
+});

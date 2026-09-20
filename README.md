@@ -29,7 +29,7 @@ Cliente React  --Socket.IO-->  Express + Socket.IO
 
 ### Frontend
 
-- React + Vite, uma rota `/sala/:codigo`.
+- React + Vite, rotas `/sala/:codigo`, `/todas-os-jogos` e `/ultimos-30-dias`.
 - Sem login: nickname + `sessionToken` no `localStorage` para reconectar.
 - Renderiza **somente** o `state:sync` do servidor (fase, vez, opções, cronômetro, ranking).
 
@@ -37,7 +37,7 @@ Cliente React  --Socket.IO-->  Express + Socket.IO
 
 - `server/src/room.ts`: regras, fila de participantes, timer, pontuação, remoção.
 - `server/src/app.ts`: HTTP (criar sala, upload de imagem) + eventos Socket.IO.
-- `server/src/visitors.ts`: SQLite com IP, nome e local geográfico de cada entrada; registros somem depois de 1 mês.
+- `server/src/visitors.ts`: SQLite com IP, nome e local geográfico de cada entrada; registros somem depois de 1 mês. A lista paginada fica em `/ultimos-30-dias`.
 - Timer com `setTimeout` no servidor (`endsAt` absoluto). Se todos os eleitores conectados votam, a rodada fecha na hora.
 
 O arquivo do banco fica em `server/data/visitors.sqlite` (ou `SQLITE_PATH`). IPs da rede local aparecem como “Rede local”; IPs públicos usam GeoIP (cidade, região, país).

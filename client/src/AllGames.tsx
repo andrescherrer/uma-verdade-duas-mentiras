@@ -1,9 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
-import type { OverviewPayload, OverviewRoom, Phase, VisitorRecord } from "../../shared/protocol.ts";
-import { BrandHeading, InfoNote, LandingBlobs } from "./Landing";
+import { useEffect, useState } from "react";
+import type { OverviewPayload, OverviewRoom, Phase } from "../../shared/protocol.ts";
+import { ADMIN_TOKEN_KEY, AdminGate } from "./AdminGate";
+import { BrandHeading, LandingBlobs } from "./Landing";
 import { avatarColor } from "./avatar";
-
-const ADMIN_TOKEN_KEY = "vm.adminToken";
 
 const PHASE_LABEL: Record<Phase, string> = {
   lobby: "Lobby",
@@ -16,9 +15,11 @@ const PHASE_LABEL: Record<Phase, string> = {
 export default function AllGames({
   onEnter,
   onBack,
+  onShowVisitors,
 }: {
   onEnter: (roomId: string) => void;
   onBack: () => void;
+  onShowVisitors: () => void;
 }) {
   const [token, setToken] = useState(() => sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? "");
   const [data, setData] = useState<OverviewPayload | null>(null);
@@ -73,10 +74,15 @@ export default function AllGames({
   }
 
   if (!token) {
-    return <AdminGate onBack={onBack} onAuthed={(next) => {
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, next);
-      setToken(next);
-    }} />;
+    return (
+      <AdminGate
+        onBack={onBack}
+        onAuthed={(next) => {
+          sessionStorage.setItem(ADMIN_TOKEN_KEY, next);
+          setToken(next);
+        }}
+      />
+    );
   }
 
   const rooms = data?.rooms ?? [];
@@ -135,29 +141,22 @@ export default function AllGames({
         </section>
 
         <section className="overview-card">
-          <h2>Visitantes dos últimos 30 dias</h2>
+          <h2>Últimos 30 dias</h2>
           {!data ? (
             <p className="overview-empty">Carregando…</p>
-          ) : visitors.length === 0 ? (
-            <p className="overview-empty">Ninguém entrou em uma sala neste período.</p>
           ) : (
-            <div className="overview-table-wrap">
-              <table className="overview-table">
-                <thead>
-                  <tr>
-                    <th>Nome</th>
-                    <th>IP</th>
-                    <th>Local</th>
-                    <th>Última visita</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visitors.map((visitor) => (
-                    <VisitorRow key={`${visitor.ip}-${visitor.nickname}`} visitor={visitor} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <p className="overview-empty">
+                {visitors.length === 0
+                  ? "Ninguém entrou em uma sala neste período."
+                  : visitors.length === 1
+                    ? "1 visitante gravado no banco."
+                    : `${visitors.length} visitantes gravados no banco.`}
+              </p>
+              <button type="button" className="btn wide overview-card-btn" onClick={onShowVisitors}>
+                Ver lista paginada
+              </button>
+            </>
           )}
         </section>
 
@@ -180,6 +179,12 @@ export default function AllGames({
           <button type="button" className="linkish" onClick={() => void logout()}>
             Sair
           </button>
+          <a className="linkish" href="/ultimos-30-dias" onClick={(event) => {
+            event.preventDefault();
+            onShowVisitors();
+          }}>
+            Últimos 30 dias
+          </a>
           <a className="linkish overview-back" href="/" onClick={(event) => {
             event.preventDefault();
             onBack();
@@ -190,100 +195,6 @@ export default function AllGames({
       </section>
     </main>
   );
-}
-
-function AdminGate({
-  onAuthed,
-  onBack,
-}: {
-  onAuthed: (token: string) => void;
-  onBack: () => void;
-}) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const payload = (await res.json().catch(() => ({}))) as { message?: string; token?: string };
-      if (!res.ok || typeof payload.token !== "string") {
-        throw new Error(payload.message ?? "Usuário ou senha inválidos.");
-      }
-      onAuthed(payload.token);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Usuário ou senha inválidos.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="landing">
-      <LandingBlobs />
-      <section className="landing-hero">
-        <BrandHeading />
-        <p className="lede">Acesso restrito ao painel de salas.</p>
-        <form className="landing-card" onSubmit={(event) => void submit(event)}>
-          <h2>Entrar como admin</h2>
-          <label htmlFor="admin-user">Usuário</label>
-          <input
-            id="admin-user"
-            className="field"
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-          <label htmlFor="admin-pass">Senha</label>
-          <input
-            id="admin-pass"
-            className="field"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button className="btn wide" type="submit" disabled={busy}>
-            Entrar
-          </button>
-        </form>
-        {error ? <p className="hint landing-error">{error}</p> : null}
-        <InfoNote>Somente o administrador master pode ver as salas ativas.</InfoNote>
-        <a className="linkish overview-back" href="/" onClick={(event) => {
-          event.preventDefault();
-          onBack();
-        }}>
-          Voltar ao início
-        </a>
-      </section>
-    </main>
-  );
-}
-
-function VisitorRow({ visitor }: { visitor: VisitorRecord }) {
-  return (
-    <tr>
-      <td>
-        <strong>{visitor.nickname}</strong>
-        {visitor.roomId ? <small>Sala {visitor.roomId}</small> : null}
-      </td>
-      <td><code>{visitor.ip}</code></td>
-      <td>{visitor.location}</td>
-      <td>{formatWhen(visitor.lastSeenAt)}</td>
-    </tr>
-  );
-}
-
-function formatWhen(ts: number) {
-  return new Date(ts).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
 function roomCountLabel(room: OverviewRoom) {

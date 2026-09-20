@@ -236,3 +236,47 @@ test("entrar na sala grava IP, nome e local do visitante por 30 dias", async (t)
   assert.ok(payload.visitors[0].ip);
   assert.equal(payload.visitors[0].location, "Rede local");
 });
+
+test("GET /api/admin/visitors pagina 20 registros e exige admin", async (t) => {
+  let now = 1_000_000;
+  const visitors = VisitorStore.memory({
+    now: () => now,
+    lookup: () => ({ location: "Rede local", country: null, region: null, city: null }),
+  });
+  const app = createApp(new RoomManager(), visitors);
+  await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+  const address = app.httpServer.address();
+  assert.ok(address && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}`;
+  t.after(() => closeApp({ ...app, url }));
+
+  const blocked = await fetch(`${url}/api/admin/visitors`);
+  assert.equal(blocked.status, 401);
+
+  for (let i = 1; i <= 21; i += 1) {
+    visitors.record({ ip: `10.0.0.${i}`, nickname: `Jogador ${i}` });
+    now += 1;
+  }
+
+  const login = await adminLogin(url);
+  const { token } = await login.json();
+  const first = await fetch(`${url}/api/admin/visitors?page=1`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(first.status, 200);
+  const page1 = await first.json();
+  assert.equal(page1.page, 1);
+  assert.equal(page1.pageSize, 20);
+  assert.equal(page1.total, 21);
+  assert.equal(page1.totalPages, 2);
+  assert.equal(page1.visitors.length, 20);
+  assert.equal(page1.visitors[0].nickname, "Jogador 21");
+
+  const second = await fetch(`${url}/api/admin/visitors?page=2`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const page2 = await second.json();
+  assert.equal(page2.page, 2);
+  assert.equal(page2.visitors.length, 1);
+  assert.equal(page2.visitors[0].nickname, "Jogador 1");
+});
