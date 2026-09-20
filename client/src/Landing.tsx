@@ -3,9 +3,11 @@ import { useState, type FormEvent, type ReactNode } from "react";
 export default function Landing({
   onEnter,
   onShowAllGames,
+  onHowToPlay,
 }: {
   onEnter: (roomId: string) => void;
   onShowAllGames: () => void;
+  onHowToPlay: () => void;
 }) {
   const [nickname, setNickname] = useState(localStorage.getItem("vm.nickname") ?? "");
   const [code, setCode] = useState("");
@@ -91,6 +93,16 @@ export default function Landing({
           <button type="button" className="linkish" disabled={busy} onClick={createRoom}>
             Ou criar uma nova sala
           </button>
+          <a
+            className="linkish"
+            href="/como-jogar"
+            onClick={(event) => {
+              event.preventDefault();
+              onHowToPlay();
+            }}
+          >
+            Como jogar
+          </a>
           <a className="linkish overview-link" href="/todas-os-jogos" onClick={(event) => {
             event.preventDefault();
             onShowAllGames();

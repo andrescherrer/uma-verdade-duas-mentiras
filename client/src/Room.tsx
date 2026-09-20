@@ -23,9 +23,11 @@ const LETTERS = ["A", "B", "C"];
 export default function Room({
   roomId,
   onShowAllGames,
+  onHowToPlay,
 }: {
   roomId: string;
   onShowAllGames: () => void;
+  onHowToPlay: () => void;
 }) {
   const socket = useMemo(() => getSocket(), []);
   const [nickname, setNickname] = useState(localStorage.getItem("vm.nickname") ?? "");
@@ -145,6 +147,16 @@ export default function Room({
               placeholder="Fulano da Silva"
             />
             <button className="btn wide" type="submit">Entrar na sala</button>
+            <a
+              className="linkish"
+              href="/como-jogar"
+              onClick={(event) => {
+                event.preventDefault();
+                onHowToPlay();
+              }}
+            >
+              Como jogar
+            </a>
           </form>
           {error ? <p className="hint landing-error">{error}</p> : null}
           <InfoNote />
