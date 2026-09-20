@@ -16,13 +16,7 @@ import Sidebar from "./Sidebar";
 import Timer from "./Timer";
 import { avatarColor } from "./avatar";
 import { getSocket, joinRoom, sessionKey } from "./socket";
-
-function imageUrl(id: string | null | undefined, roomId: string) {
-  if (!id) return "";
-  const token = localStorage.getItem(sessionKey(roomId)) ?? "";
-  const query = token ? `?token=${encodeURIComponent(token)}` : "";
-  return `/api/images/${id}${query}`;
-}
+import SessionImage from "./SessionImage";
 
 const LETTERS = ["A", "B", "C"];
 
@@ -609,7 +603,7 @@ function StatementField({
         />
         {imageId ? (
           <span className="thumb-wrap">
-            <img className="thumb" src={imageUrl(imageId, roomId)} alt="" />
+            <SessionImage className="thumb" imageId={imageId} roomId={roomId} />
             <button type="button" className="thumb-x" onClick={onClear} aria-label="Remover imagem">
               ×
             </button>
@@ -723,7 +717,9 @@ function Reveal({
           </div>
           <div className={`truth-hero-body ${truth.imageId ? "has-image" : ""}`}>
             <h3>{truth.text}</h3>
-            {truth.imageId ? <img src={imageUrl(truth.imageId, state.roomId)} alt="Prova da verdade" /> : null}
+            {truth.imageId ? (
+              <SessionImage imageId={truth.imageId} roomId={state.roomId} alt="Prova da verdade" />
+            ) : null}
           </div>
         </article>
       ) : null}
@@ -735,7 +731,7 @@ function Reveal({
               <span className="lie-x">✕</span>
               <h3>{lie.text}</h3>
             </div>
-            {lie.imageId ? <img src={imageUrl(lie.imageId, state.roomId)} alt="" /> : null}
+            {lie.imageId ? <SessionImage imageId={lie.imageId} roomId={state.roomId} /> : null}
           </article>
         ))}
       </div>

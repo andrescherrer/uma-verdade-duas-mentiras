@@ -2,9 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { io as clientIo, type Socket } from "socket.io-client";
 import { C2S, S2C, type JoinedPayload, type PublicState } from "../../shared/protocol.ts";
+import { ADMIN_COOKIE } from "./admin-cookie.ts";
 import { createApp } from "./app.ts";
 import { RoomManager } from "./rooms.ts";
 import { VisitorStore } from "./visitors.ts";
+
+function cookieFromResponse(res: Response): string {
+  const raw = typeof res.headers.getSetCookie === "function"
+    ? res.headers.getSetCookie()
+    : [];
+  const list = raw.length > 0 ? raw : [res.headers.get("set-cookie") ?? ""];
+  for (const entry of list) {
+    const match = entry.match(new RegExp(`${ADMIN_COOKIE}=([^;]+)`));
+    if (match) return `${ADMIN_COOKIE}=${match[1]}`;
+  }
+  return "";
+}
+
+function adminHeaders(cookie: string): HeadersInit {
+  return cookie ? { Cookie: cookie } : {};
+}
 
 function waitFor<T>(socket: Socket, event: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -137,12 +154,38 @@ test("join em código inventado não cria sala", async (t) => {
 });
 
 async function adminLogin(url: string, username = "admin-master-blaster", password = "!@#987654321") {
-  return fetch(`${url}/api/admin/login`, {
+  const res = await fetch(`${url}/api/admin/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
+  return { res, cookie: cookieFromResponse(res), body: await res.json().catch(() => ({})) };
 }
+
+test("em produção o login admin aceita a senha do dia !@#YYYYMMDD", async (t) => {
+  const previous = process.env.NODE_ENV;
+  const previousPass = process.env.ADMIN_PASSWORD;
+  process.env.NODE_ENV = "production";
+  delete process.env.ADMIN_PASSWORD;
+  t.after(() => {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+    if (previousPass === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = previousPass;
+  });
+
+  const { productionAdminPassword } = await import("./admin-auth.ts");
+  const app = await listen();
+  t.after(() => closeApp(app));
+
+  const wrong = await adminLogin(app.url, "admin-master-blaster", "!@#987654321");
+  assert.equal(wrong.res.status, 401);
+
+  const login = await adminLogin(app.url, "admin-master-blaster", productionAdminPassword());
+  assert.equal(login.res.status, 200);
+  assert.equal(login.body.ok, true);
+  assert.ok(login.cookie.includes(ADMIN_COOKIE));
+});
 
 test("GET /api/rooms exige login do admin-master-blaster", async (t) => {
   const app = await listen();
@@ -152,15 +195,15 @@ test("GET /api/rooms exige login do admin-master-blaster", async (t) => {
   assert.equal(blocked.status, 401);
 
   const wrong = await adminLogin(app.url, "admin-master-blaster", "senha-errada");
-  assert.equal(wrong.status, 401);
+  assert.equal(wrong.res.status, 401);
 
   const login = await adminLogin(app.url);
-  assert.equal(login.status, 200);
-  const { token } = await login.json();
-  assert.equal(typeof token, "string");
+  assert.equal(login.res.status, 200);
+  assert.equal(login.body.ok, true);
+  assert.ok(login.cookie);
 
   const empty = await fetch(`${app.url}/api/rooms`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: adminHeaders(login.cookie),
   });
   assert.equal(empty.status, 200);
   assert.deepEqual(await empty.json(), { rooms: [], connectedUsers: [], visitors: [] });
@@ -171,7 +214,7 @@ test("GET /api/rooms exige login do admin-master-blaster", async (t) => {
   room.disconnect(joao.id);
 
   const listed = await fetch(`${app.url}/api/rooms`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: adminHeaders(login.cookie),
   });
   assert.equal(listed.status, 200);
   const payload = await listed.json();
@@ -190,7 +233,7 @@ test("GET /api/rooms exige login do admin-master-blaster", async (t) => {
   assert.equal(sara.connected, true);
 });
 
-test("imagem só é servida com token de quem está na sala", async (t) => {
+test("imagem só é servida com header x-session-token da sala", async (t) => {
   const app = await listen();
   t.after(() => closeApp(app));
   const room = app.manager.create();
@@ -202,19 +245,47 @@ test("imagem só é servida com token de quem está na sala", async (t) => {
   const missing = await fetch(`${app.url}/api/images/${image.id}`);
   assert.equal(missing.status, 404);
 
-  const wrong = await fetch(`${app.url}/api/images/${image.id}?token=nope`);
-  assert.equal(wrong.status, 404);
-
-  const otherMember = await fetch(
-    `${app.url}/api/images/${image.id}?token=${encodeURIComponent(stranger.sessionToken)}`,
-  );
-  assert.equal(otherMember.status, 404);
-
-  const ok = await fetch(
+  const queryIgnored = await fetch(
     `${app.url}/api/images/${image.id}?token=${encodeURIComponent(player.sessionToken)}`,
   );
+  assert.equal(queryIgnored.status, 404);
+
+  const wrong = await fetch(`${app.url}/api/images/${image.id}`, {
+    headers: { "x-session-token": "nope" },
+  });
+  assert.equal(wrong.status, 404);
+
+  const otherMember = await fetch(`${app.url}/api/images/${image.id}`, {
+    headers: { "x-session-token": stranger.sessionToken },
+  });
+  assert.equal(otherMember.status, 404);
+
+  const ok = await fetch(`${app.url}/api/images/${image.id}`, {
+    headers: { "x-session-token": player.sessionToken },
+  });
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get("content-type"), "image/png");
+});
+
+test("GET /api/rooms/:id exige sessão da sala e não vaza fase/contagem", async (t) => {
+  const app = await listen();
+  t.after(() => closeApp(app));
+  const room = app.manager.create();
+  const player = room.join("Sara", "sock-1");
+
+  const publicProbe = await fetch(`${app.url}/api/rooms/${room.id}`);
+  assert.equal(publicProbe.status, 404);
+
+  const wrongToken = await fetch(`${app.url}/api/rooms/${room.id}`, {
+    headers: { "x-session-token": "nope" },
+  });
+  assert.equal(wrongToken.status, 404);
+
+  const ok = await fetch(`${app.url}/api/rooms/${room.id}`, {
+    headers: { "x-session-token": player.sessionToken },
+  });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { roomId: room.id });
 });
 
 test("entrar na sala grava IP, nome e local do visitante por 30 dias", async (t) => {
@@ -225,9 +296,8 @@ test("entrar na sala grava IP, nome e local do visitante por 30 dias", async (t)
   t.after(() => client.socket.disconnect());
 
   const login = await adminLogin(app.url);
-  const { token } = await login.json();
   const listed = await fetch(`${app.url}/api/rooms`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: adminHeaders(login.cookie),
   });
   const payload = await listed.json();
   assert.equal(payload.visitors.length, 1);
@@ -259,9 +329,8 @@ test("GET /api/admin/visitors pagina 20 registros e exige admin", async (t) => {
   }
 
   const login = await adminLogin(url);
-  const { token } = await login.json();
   const first = await fetch(`${url}/api/admin/visitors?page=1`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: adminHeaders(login.cookie),
   });
   assert.equal(first.status, 200);
   const page1 = await first.json();
@@ -273,7 +342,7 @@ test("GET /api/admin/visitors pagina 20 registros e exige admin", async (t) => {
   assert.equal(page1.visitors[0].nickname, "Jogador 21");
 
   const second = await fetch(`${url}/api/admin/visitors?page=2`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: adminHeaders(login.cookie),
   });
   const page2 = await second.json();
   assert.equal(page2.page, 2);

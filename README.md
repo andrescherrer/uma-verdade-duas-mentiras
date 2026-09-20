@@ -14,6 +14,16 @@ npm run dev
 
 Em produção: `npm run build && npm start` (o servidor entrega o `client/dist`).
 
+### Admin
+
+- Usuário padrão: `admin-master-blaster` (ou `ADMIN_USERNAME`).
+- Em **desenvolvimento**, senha padrão: `!@#987654321` (ou `ADMIN_PASSWORD`).
+- Em **produção** (`NODE_ENV=production`), se `ADMIN_PASSWORD` não estiver definida, a senha do dia é `!@#` + data `YYYYMMDD` no fuso `America/Sao_Paulo` (ex.: `!@#20260920`).
+- Sessão admin vai em cookie `HttpOnly` (`vm_admin`), não no `sessionStorage`.
+- `TRUST_PROXY=1` só se a app estiver atrás de um reverse proxy real; sem isso, `X-Forwarded-For` do cliente é ignorado.
+- Imagens exigem header `x-session-token` (sem token na URL).
+- `GET /api/rooms/:id` só responde `{ roomId }` para quem já tem sessão na sala.
+
 ## Arquitetura
 
 O navegador **não** é a fonte da verdade. Cada sala existe na memória do servidor (`GameRoom`). O cliente só envia intenções (`room:join`, `round:vote`, …) e recebe um recorte do estado adequado à fase atual.

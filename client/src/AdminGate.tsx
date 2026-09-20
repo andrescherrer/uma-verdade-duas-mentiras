@@ -1,15 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { BrandHeading, InfoNote, LandingBlobs } from "./Landing";
 
-export const ADMIN_TOKEN_KEY = "vm.adminToken";
-
 export function AdminGate({
   onAuthed,
   onBack,
   lede = "Acesso restrito ao painel de salas.",
   note = "Somente o administrador master pode ver as salas ativas.",
 }: {
-  onAuthed: (token: string) => void;
+  onAuthed: () => void;
   onBack: () => void;
   lede?: string;
   note?: string;
@@ -26,14 +24,15 @@ export function AdminGate({
     try {
       const res = await fetch("/api/admin/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const payload = (await res.json().catch(() => ({}))) as { message?: string; token?: string };
-      if (!res.ok || typeof payload.token !== "string") {
+      const payload = (await res.json().catch(() => ({}))) as { message?: string; ok?: boolean };
+      if (!res.ok || !payload.ok) {
         throw new Error(payload.message ?? "Usuário ou senha inválidos.");
       }
-      onAuthed(payload.token);
+      onAuthed();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Usuário ou senha inválidos.");
     } finally {
@@ -81,4 +80,18 @@ export function AdminGate({
       </section>
     </main>
   );
+}
+
+export async function fetchAdminSession(): Promise<boolean> {
+  const res = await fetch("/api/admin/session", { credentials: "include" });
+  if (!res.ok) return false;
+  const payload = (await res.json()) as { authenticated?: boolean };
+  return Boolean(payload.authenticated);
+}
+
+export async function adminLogout(): Promise<void> {
+  await fetch("/api/admin/logout", {
+    method: "POST",
+    credentials: "include",
+  }).catch(() => undefined);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { VisitorRecord, VisitorsPagePayload } from "../../shared/protocol.ts";
 import { VISITORS_PAGE_SIZE } from "../../shared/protocol.ts";
-import { ADMIN_TOKEN_KEY, AdminGate } from "./AdminGate";
+import { AdminGate, adminLogout, fetchAdminSession } from "./AdminGate";
 import { BrandHeading, LandingBlobs } from "./Landing";
 
 function pageFromSearch(): number {
@@ -20,16 +20,20 @@ export default function RecentVisitors({
   onBack: () => void;
   onShowAllGames: () => void;
 }) {
-  const [token, setToken] = useState(() => sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? "");
+  const [authed, setAuthed] = useState<boolean | null>(null);
   const [page, setPage] = useState(pageFromSearch);
   const [data, setData] = useState<VisitorsPagePayload | null>(null);
   const [error, setError] = useState("");
 
-  function clearSession() {
-    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-    setToken("");
-    setData(null);
-  }
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAdminSession().then((ok) => {
+      if (!cancelled) setAuthed(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const onPop = () => setPage(pageFromSearch());
@@ -38,16 +42,17 @@ export default function RecentVisitors({
   }, []);
 
   useEffect(() => {
-    if (!token) return;
+    if (!authed) return;
     let cancelled = false;
 
     async function load() {
       try {
-        const res = await fetch(`/api/admin/visitors?page=${page}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(`/api/admin/visitors?page=${page}`, { credentials: "include" });
         if (res.status === 401) {
-          if (!cancelled) clearSession();
+          if (!cancelled) {
+            setAuthed(false);
+            setData(null);
+          }
           return;
         }
         if (!res.ok) throw new Error("Falha ao carregar.");
@@ -69,7 +74,7 @@ export default function RecentVisitors({
     return () => {
       cancelled = true;
     };
-  }, [token, page]);
+  }, [authed, page]);
 
   function goToPage(next: number) {
     if (next === page) return;
@@ -78,25 +83,30 @@ export default function RecentVisitors({
   }
 
   async function logout() {
-    if (token) {
-      await fetch("/api/admin/logout", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => undefined);
-    }
-    clearSession();
+    await adminLogout();
+    setAuthed(false);
+    setData(null);
   }
 
-  if (!token) {
+  if (authed === null) {
+    return (
+      <main className="overview">
+        <LandingBlobs />
+        <section className="overview-hero">
+          <BrandHeading />
+          <p className="lede">Verificando sessão…</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!authed) {
     return (
       <AdminGate
         onBack={onBack}
         lede="Acesso restrito aos visitantes dos últimos 30 dias."
         note="Somente o administrador master pode ver esta lista."
-        onAuthed={(next) => {
-          sessionStorage.setItem(ADMIN_TOKEN_KEY, next);
-          setToken(next);
-        }}
+        onAuthed={() => setAuthed(true)}
       />
     );
   }

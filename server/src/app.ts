@@ -20,15 +20,21 @@ import {
   type SubmitPrepPayload,
   type VotePayload,
 } from "../../shared/protocol.ts";
-import { forwardedIp } from "./geo.ts";
+import { resolveAdminPassword, resolveAdminUsername } from "./admin-auth.ts";
+import {
+  ADMIN_TTL_MS,
+  clearAdminCookie,
+  readAdminTokenFromRequest,
+  serializeAdminCookie,
+} from "./admin-cookie.ts";
 import { GameError } from "./room.ts";
 import { RoomManager } from "./rooms.ts";
+import { httpClientIp, socketClientIp, trustProxyEnabled } from "./proxy.ts";
 import { VisitorStore } from "./visitors.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin-master-blaster";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "!@#987654321";
-const ADMIN_TTL_MS = 8 * 60 * 60 * 1000;
+const TRUST_PROXY = trustProxyEnabled();
+const SECURE_COOKIES = process.env.NODE_ENV === "production";
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest();
@@ -36,12 +42,6 @@ function sha256(value: string) {
 
 function secretEquals(given: string, expected: string) {
   return timingSafeEqual(sha256(given), sha256(expected));
-}
-
-function readAdminToken(req: { header(name: string): string | undefined }) {
-  const auth = String(req.header("authorization") ?? "");
-  if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
-  return String(req.header("x-admin-token") ?? "").trim();
 }
 
 function errorPayload(err: unknown): ErrorPayload {
@@ -73,6 +73,7 @@ function corsOrigins(): cors.CorsOptions {
       }
       callback(new Error("Origin not allowed"));
     },
+    credentials: true,
   };
 }
 
@@ -88,14 +89,6 @@ function createRateLimiter(max: number, windowMs = 60_000) {
   };
 }
 
-function clientIp(req: { ip?: string; socket?: { remoteAddress?: string } }): string {
-  return forwardedIp(undefined, req.ip ?? req.socket?.remoteAddress ?? "unknown");
-}
-
-function socketClientIp(socket: { handshake: { address: string; headers: { [key: string]: string | string[] | undefined } } }): string {
-  return forwardedIp(socket.handshake.headers["x-forwarded-for"], socket.handshake.address || "unknown");
-}
-
 function routeParam(value: unknown): string {
   if (Array.isArray(value)) return String(value[0] ?? "");
   return typeof value === "string" ? value : "";
@@ -104,7 +97,7 @@ function routeParam(value: unknown): string {
 export function createApp(manager = new RoomManager(), visitors = VisitorStore.openDefault()) {
   const app = express();
   const corsOptions = corsOrigins();
-  app.set("trust proxy", 1);
+  if (TRUST_PROXY) app.set("trust proxy", 1);
   app.use(cors(corsOptions));
   app.use(express.json());
   visitors.purgeExpired();
@@ -118,7 +111,7 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
   const adminSessions = new Map<string, number>();
 
   function adminAuthorized(req: { header(name: string): string | undefined }) {
-    const token = readAdminToken(req);
+    const token = readAdminTokenFromRequest(req);
     const expiresAt = adminSessions.get(token);
     if (!expiresAt) return false;
     if (Date.now() > expiresAt) {
@@ -128,25 +121,33 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
     return true;
   }
 
+  app.get("/api/admin/session", (req, res) => {
+    res.json({ authenticated: adminAuthorized(req) });
+  });
+
   app.post("/api/admin/login", (req, res) => {
-    if (!adminLoginLimit(clientIp(req))) {
+    if (!adminLoginLimit(httpClientIp(req, TRUST_PROXY))) {
       res.status(429).json({ message: "Muitas tentativas. Espere um pouco." });
       return;
     }
     const username = String(req.body?.username ?? "");
     const password = String(req.body?.password ?? "");
-    if (!secretEquals(username, ADMIN_USERNAME) || !secretEquals(password, ADMIN_PASSWORD)) {
+    const expectedUser = resolveAdminUsername();
+    const expectedPass = resolveAdminPassword();
+    if (!secretEquals(username, expectedUser) || !secretEquals(password, expectedPass)) {
       res.status(401).json({ message: "Usuário ou senha inválidos." });
       return;
     }
     const token = randomUUID();
     adminSessions.set(token, Date.now() + ADMIN_TTL_MS);
-    res.json({ token });
+    res.setHeader("Set-Cookie", serializeAdminCookie(token, SECURE_COOKIES));
+    res.json({ ok: true });
   });
 
   app.post("/api/admin/logout", (req, res) => {
-    const token = readAdminToken(req);
+    const token = readAdminTokenFromRequest(req);
     if (token) adminSessions.delete(token);
+    res.setHeader("Set-Cookie", clearAdminCookie(SECURE_COOKIES));
     res.json({ ok: true });
   });
 
@@ -156,7 +157,7 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
   });
 
   app.post("/api/rooms", (req, res) => {
-    if (!createRoomLimit(clientIp(req))) {
+    if (!createRoomLimit(httpClientIp(req, TRUST_PROXY))) {
       res.status(429).json({ message: "Muitas salas criadas. Espere um pouco." });
       return;
     }
@@ -191,16 +192,19 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
   });
 
   app.get("/api/rooms/:roomId", (req, res) => {
-    const room = manager.get(routeParam(req.params.roomId));
-    if (!room) {
+    const roomId = routeParam(req.params.roomId);
+    const room = manager.get(roomId);
+    const token = String(req.header("x-session-token") ?? "");
+    const member = token ? room?.findByToken(token) : undefined;
+    if (!room || !member) {
       res.status(404).json({ message: "Sala não encontrada." });
       return;
     }
-    res.json({ roomId: room.id, phase: room.phase, players: room.players.size });
+    res.json({ roomId: room.id });
   });
 
   app.post("/api/rooms/:roomId/images", upload.single("image"), (req, res) => {
-    if (!uploadLimit(clientIp(req))) {
+    if (!uploadLimit(httpClientIp(req, TRUST_PROXY))) {
       res.status(429).json({ message: "Muitos envios. Espere um pouco." });
       return;
     }
@@ -229,7 +233,7 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
 
   app.get("/api/images/:imageId", (req, res) => {
     const image = manager.images.get(routeParam(req.params.imageId));
-    const token = routeParam(req.query.token) || String(req.header("x-session-token") ?? "");
+    const token = String(req.header("x-session-token") ?? "");
     const room = image ? manager.get(image.roomId) : undefined;
     const member = token && room?.findByToken(token);
     if (!image || !member) {
@@ -310,7 +314,7 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
 
     socket.on(C2S.JOIN, (payload: JoinPayload) => {
       try {
-        if (!joinLimit(socket.handshake.address || "unknown")) {
+        if (!joinLimit(socketClientIp(socket, TRUST_PROXY))) {
           throw new GameError("rate-limited", "Muitas tentativas. Espere um pouco.");
         }
         const roomId = String(payload?.roomId ?? "").trim().toUpperCase();
@@ -332,7 +336,7 @@ export function createApp(manager = new RoomManager(), visitors = VisitorStore.o
         trackSocket(player.id, socket.id);
         try {
           visitors.record({
-            ip: socketClientIp(socket),
+            ip: socketClientIp(socket, TRUST_PROXY),
             nickname: player.nickname,
             roomId: room.id,
           });

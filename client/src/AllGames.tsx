@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { OverviewPayload, OverviewRoom, Phase } from "../../shared/protocol.ts";
-import { ADMIN_TOKEN_KEY, AdminGate } from "./AdminGate";
+import { AdminGate, adminLogout, fetchAdminSession } from "./AdminGate";
 import { BrandHeading, LandingBlobs } from "./Landing";
 import { avatarColor } from "./avatar";
 
@@ -21,27 +21,32 @@ export default function AllGames({
   onBack: () => void;
   onShowVisitors: () => void;
 }) {
-  const [token, setToken] = useState(() => sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? "");
+  const [authed, setAuthed] = useState<boolean | null>(null);
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [error, setError] = useState("");
 
-  function clearSession() {
-    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-    setToken("");
-    setData(null);
-  }
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAdminSession().then((ok) => {
+      if (!cancelled) setAuthed(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!token) return;
+    if (!authed) return;
     let cancelled = false;
 
     async function load() {
       try {
-        const res = await fetch("/api/rooms", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch("/api/rooms", { credentials: "include" });
         if (res.status === 401) {
-          if (!cancelled) clearSession();
+          if (!cancelled) {
+            setAuthed(false);
+            setData(null);
+          }
           return;
         }
         if (!res.ok) throw new Error("Falha ao carregar.");
@@ -61,26 +66,31 @@ export default function AllGames({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [token]);
+  }, [authed]);
 
   async function logout() {
-    if (token) {
-      await fetch("/api/admin/logout", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => undefined);
-    }
-    clearSession();
+    await adminLogout();
+    setAuthed(false);
+    setData(null);
   }
 
-  if (!token) {
+  if (authed === null) {
+    return (
+      <main className="overview">
+        <LandingBlobs />
+        <section className="overview-hero">
+          <BrandHeading />
+          <p className="lede">Verificando sessão…</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!authed) {
     return (
       <AdminGate
         onBack={onBack}
-        onAuthed={(next) => {
-          sessionStorage.setItem(ADMIN_TOKEN_KEY, next);
-          setToken(next);
-        }}
+        onAuthed={() => setAuthed(true)}
       />
     );
   }
